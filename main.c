@@ -2,7 +2,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/sendfile.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #define ARRAY_LENGTH(arr) (sizeof(arr) / sizeof(arr[0]))
 
@@ -28,7 +32,45 @@ void get_request_from_http_msg(struct request *req, char *http_msg) {
         token = strtok(NULL, " ");
         strcpy(req->path, token);
 
+	// Get rid of leading slash and clear 'old' last character
+	memmove(&req->path[0], &req->path[1], strlen(req->path) - 1);
+	req->path[strlen(req->path) - 1] = '\0'; 
+	
 	//printf("req->method = %s, req->path = %s\n", req->method, req->path);
+}
+
+void sendfile_to_client(int client_sock_fd, const char *file_path) {
+	int file_fd = open(file_path, O_RDONLY);
+	if (file_fd < 0) {
+		perror("open");
+		return;
+	}
+	
+	struct stat file_stat;
+	if (fstat(file_fd, &file_stat) < 0) {
+		perror("fstat");
+		close(file_fd);
+		return;
+	}
+
+	off_t offset = 0;
+	int bytes_remaining = file_stat.st_size;
+	int sent_bytes;
+
+	while (bytes_remaining > 0) {
+		sent_bytes = sendfile(client_sock_fd, file_fd, &offset, bytes_remaining);
+
+		if (sent_bytes < 0) {
+			perror("sendfile");
+			close(file_fd);
+			return;
+		}
+
+		bytes_remaining -= sent_bytes;
+	}
+
+	close(file_fd);
+	//shutdown(client_sock_fd, SHUT_WR);
 }
 
 int main(void) {
@@ -87,9 +129,14 @@ int main(void) {
 		struct request req;
 		get_request_from_http_msg(&req, recv_buf);
 		printf("%s %s\n", req.method, req.path);
+		
+		if (strcmp(req.method, "GET") == 0) {
+			sendfile_to_client(client_sfd, req.path);
+		}
 
 		// Service stuff
 		memset(recv_buf, 0, ARRAY_LENGTH(recv_buf));
+		close(client_sfd);
 	}
 
 	return 0;
