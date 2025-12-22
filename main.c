@@ -8,13 +8,39 @@
 
 #define PORT_NUMBER 8080
 
+struct request {
+	char method[8];
+	char path[128];
+};
+
+// Generalizing intake of 'method' for scalability for future http1 implementation
+void get_request_from_http_msg(struct request *req, char *http_msg) {
+	if (http_msg == NULL || strcmp(http_msg, "") == 0) {
+		perror("get_http_request_substr: 'src' is NULL or empty");
+		return;
+	}
+	char *token = NULL;
+	memset(req, 0, sizeof(struct request));
+
+	// Extract request substring out of the http message
+        token = strtok(http_msg, " ");
+	strcpy(req->method, token);
+        token = strtok(NULL, " ");
+        strcpy(req->path, token);
+
+	//printf("req->method = %s, req->path = %s\n", req->method, req->path);
+}
+
 int main(void) {
 	printf("Server says hello!\n");
 
 	int sock_fd;
 	struct sockaddr_in my_addr;
 	int opt = 1;
+
+	unsigned char request[128] = { "" };
 	unsigned char recv_buf[128] = { "" };
+
 	if ( (sock_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("socket");
 		exit(EXIT_FAILURE);
@@ -51,7 +77,6 @@ int main(void) {
 			continue;
 		}
 		puts("~~~~~~~~~~~");
-		puts("accept()'ed client connection!");
 
 		int r = recv(client_sfd, recv_buf, ARRAY_LENGTH(recv_buf), 0);
 		if (r < 0) {
@@ -59,7 +84,12 @@ int main(void) {
 			continue;
 		}
 
-		printf("Client says ---> %s\n", recv_buf);
+		struct request req;
+		get_request_from_http_msg(&req, recv_buf);
+		printf("%s %s\n", req.method, req.path);
+
+		// Service stuff
+		memset(recv_buf, 0, ARRAY_LENGTH(recv_buf));
 	}
 
 	return 0;
