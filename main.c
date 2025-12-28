@@ -70,7 +70,7 @@ void sendfile_to_client(int client_sock_fd, const char *file_path) {
 	}
 
 	close(file_fd);
-	//shutdown(client_sock_fd, SHUT_WR);
+	printf("Successfully responded to client!\n");
 }
 
 int main(void) {
@@ -132,6 +132,8 @@ int main(void) {
 		
 		if (strcmp(req.method, "GET") == 0) {
 			sendfile_to_client(client_sfd, req.path);
+		} else {
+			fprintf(stderr, "Failed to handle unknown request method-type!\n");
 		}
 
 		// Service stuff
